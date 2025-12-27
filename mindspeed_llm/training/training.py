@@ -1096,6 +1096,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
                 if avg > 0.0:
                     log_string += ' {}: {:.6E} |'.format(key, avg)
                 total_loss_dict[key] = torch.tensor([0.0], dtype=torch.float, device='cuda')
+                if wandb_writer:
+                    wandb_writer.log({key: avg}, iteration)
         log_string += f' loss scale: {loss_scale:.1f} |'
         if grad_norm is not None:
             log_string += f' grad norm: {grad_norm:.3f} |'

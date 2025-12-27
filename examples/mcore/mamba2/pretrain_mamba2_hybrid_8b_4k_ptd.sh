@@ -5,21 +5,24 @@ export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 export HCCL_CONNECT_TIMEOUT=3600
 export TASK_QUEUE_ENABLE=2
 
-NPUS_PER_NODE=8
+export WANDB_INIT_TIMEOUT=600
+export WANDB_START_METHOD=thread  # 分布式训练必加，避免多进程冲突
+
+NPUS_PER_NODE=1
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
-CKPT_SAVE_DIR="your model save ckpt path"
-DATA_PATH="your data path"
-TOKENIZER_PATH="your tokenizer path"
-CKPT_LOAD_DIR="your model ckpt path"
+CKPT_SAVE_DIR=./ckpt
+DATA_PATH=/sharedata/zimoliu/data/alpaca_zh_text_document
+TOKENIZER_PATH=/sharedata/zimoliu/models/Qwen2.5-7B-Instruct
+# CKPT_LOAD_DIR="your model ckpt path"
 
-TP=8
+TP=1
 PP=1
-NUM_LAYERS=56
+NUM_LAYERS=8
 SEQ_LEN=4096
 MBS=2
 GBS=8
@@ -52,7 +55,7 @@ MAMBA_ARGS="
     --mamba-d-conv 4 \
     --mamba-expand 2 \
     --mamba-head-dim 64 \
-    --tokenizer-type  GPTSentencePieceTokenizer \
+    --tokenizer-type  HuggingFaceTokenizer \
     --tokenizer-model ${TOKENIZER_PATH} \
     --hidden-size 4096 \
     --hybrid-attention-ratio 0.08 \
@@ -105,15 +108,20 @@ OUTPUT_ARGS="
     --save-interval 500 \
     --eval-interval 500 \
     --eval-iters 0 \
-    --load ${CKPT_LOAD_DIR} \
     --save ${CKPT_SAVE_DIR} \
     --no-save-rng \
-    --no-save-optim
+    --no-save-optim \
+    --use-wandb \
+    --wandb-project ascend \
+    --wandb-exp-name mamba2-8b \
+    --log-throughput \
+    --tensorboard-dir ./tensorboard \
+    --log-timers-to-tensorboard
 "
 
-python -m torch.distributed.launch $DISTRIBUTED_ARGS pretrain_mamba.py \
+python -m torch.distributed.launch $DISTRIBUTED_ARGS ../../../pretrain_mamba.py \
     $MAMBA_ARGS \
     $DATA_ARGS \
     $OUTPUT_ARGS \
     --distributed-backend nccl \
-    | tee logs/pretrain_mamba2_hybrid_8b_4k_ptd.log
+    | tee pretrain_mamba2_hybrid_8b_4k_ptd.log

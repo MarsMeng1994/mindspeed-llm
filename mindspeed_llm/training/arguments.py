@@ -410,6 +410,44 @@ def _add_moe_args(parser):
                             'in each pp stage.')
     group.add_argument('--moe-allgather-overlap-comm', action='store_true', default=False,
                        help='moe_allgather_overlap_comm')
+    # Conv att
+    group.add_argument('--input-conv-freq', type=int, default=None,
+                       help='Frequency of 1d convolution to use on input.')
+    group.add_argument('--input-conv-start-layer-idx', type=int, default=0,
+                       help='Start layer idx of 1d convolutional attention to use on input.')
+    group.add_argument('--input-conv-init', type=float, default=None,
+                       help='1d convolution init param.')
+    group.add_argument('--use-conv-bias', type=bool, default=False,
+                       help='Enable convolution bias.')
+    group.add_argument('--conv-attention-kernel-size', type=int, default=2,
+                       help='Number of convolution step.')
+    group.add_argument('--use-kv-compressed-in-routing', action='store_true',
+                       help='Enable kv compressed for router, only support for mla self attention.')
+    # Knowledge block
+    group.add_argument('--use-knowledge-block', action='store_true',
+                       help='Enable knowledge block.')
+    group.add_argument('--knowledge-block-freq', type=int, default=4,
+                       help='Frequency of knowledge block to use on input.')
+    group.add_argument('--knowledge-block-start-layer-idx', type=int, default=0,
+                       help='Start layer idx of knowledge block to use on input.')
+    group.add_argument('--knowledge-block-fields-num', type=int, default=128,
+                       help='Knowledge block attention fields num.')
+    group.add_argument('--knowledge-block-heads-num', type=int, default=32,
+                       help='Knowledge block attention heads num.')
+    group.add_argument('--knowledge-block-heads-dim', type=int, default=128,
+                       help='Knowledge block attention heads dimension.')
+    
+    group.add_argument('--hybrid-mlp-moe', action='store_true',
+                       help='Enable hybrid mlp & moe in hybrid mamba.')
+
+    # Vae
+    group.add_argument('--vae-latent-size', type=int, default=1536,
+                       help='Vae latent size.')
+    
+    #fk 
+    group.add_argument('--kl-loss-scale', type=float, default=0.001,
+                       help='kl_loss_scale')
+    
     return parser
 
 
@@ -449,7 +487,8 @@ def _add_data_args(parser):
                             'starting at index 0, aligned with the LlamaFatory.')
     group.add_argument("--enable-thinking", type=lambda x: {"true": True, "false": False, "none": None}[x.lower()], default=None,
                        help="Whether or not to enable thinking mode for reasoning models.")
-
+    group.add_argument('--is-sft-dataset', action='store_true',
+                       help='Whether to use sft gpt dataset.')
     return parser
 
 
