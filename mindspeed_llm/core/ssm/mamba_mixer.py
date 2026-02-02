@@ -24,8 +24,8 @@ def mamba_mixer_init_wrapper(fn):
         kwargs["d_conv"] = param_args.mamba_d_conv
         kwargs["expand"] = param_args.mamba_expand   
         fn(self, *args, **kwargs)
-        dt_min = kwargs.pop('dt_min', 0.001)
-        dt_max = kwargs.pop('dt_max', 0.1)
+        dt_min = kwargs.pop('dt_min', 0.0)
+        dt_max = kwargs.pop('dt_max', float("inf"))
         self.use_mem_eff_path = False
         self.d_ssm = param_args.mamba_d_ssm
         self.dt_min = dt_min
@@ -64,13 +64,18 @@ def mamba_mixer_forward(self, hidden_states, seqlen=None, seq_idx=None, cu_seqle
     A = -torch.exp(self.A_log.float())
 
     xz, _ = self.in_proj(hidden_states)
-
+    # from megatron.training import print_rank_0
+    # print_rank_0(("self.in_proj", self.in_proj.weight, self.in_proj.weight.shape))
+    # print_rank_0(("hidden_states", hidden_states, hidden_states.shape))
+    # print_rank_0(("xz", xz, xz.shape))
+    
     # transpose: l b pd --> b l pd
     if seqlen_og is not None:
         xz = rearrange(xz, "(l b) d -> b l d", l=seqlen)
     else:
         xz = rearrange(xz, "l b d -> b l d").contiguous()
-
+    # print_rank_0(("xz", xz, xz.shape))
+    
     d_mlp = (xz.shape[-1] - 2 * self.d_ssm_local - 2 * self.ngroups_local * self.d_state - self.nheads_local) // 2
     z0, x0, z, xBC, dt = torch.split(
         xz,
@@ -116,11 +121,15 @@ def mamba_mixer_forward(self, hidden_states, seqlen=None, seq_idx=None, cu_seqle
         seqlen = xBC.size(2)
         if seq_idx:
             raise('Variable length inputs in convolution are not currently supported')
+        # print_rank_0(("xBC",self.act, xBC, xBC.shape))
+        # print_rank_0(("self.conv1d.weight",self.conv1d.weight, self.conv1d.weight.shape))
+        # print_rank_0(("self.conv1d.bias",self.conv1d.bias, self.conv1d.bias.shape))
         xBC = self.act(self.conv1d(xBC)[..., :seqlen])
+        # print_rank_0(("xBC",xBC, xBC.shape))
 
         # transpose b pd l --> b l pd
         xBC = rearrange(xBC, "b d l ->  b l d").contiguous()
-
+        # print_rank_0(("xBC",xBC, xBC.shape))
     x, B, C = torch.split(
         xBC,
         [
@@ -156,8 +165,27 @@ def mamba_mixer_forward(self, hidden_states, seqlen=None, seq_idx=None, cu_seqle
         return_final_state=True if ssm_state else False
     )
     state_space_duality = StateSpaceProcessor(config=config)
+    # print_rank_0(("x",x,x.shape)) # right
+    # print_rank_0(("dt",dt,dt.shape)) # right
+    # print_rank_0(("A",A,A.shape)) # right
+    # print_rank_0(("B",B,B.shape)) # right
+    # print_rank_0(("C",C,C.shape)) # right
+    # print_rank_0(("D",self.D,self.D.shape)) # right
+    # print_rank_0(("dt_bias",config["dt_bias"],config["dt_bias"].shape)) #right
+    # print_rank_0(("chunk_size",config["chunk_size"])) # right
+    # print_rank_0(("dt_min",config["dt_min"])) #right
+    # print_rank_0(("dt_max",config["dt_max"])) # right
+    # print_rank_0(("z",z,z.shape)) # right
+    # print_rank_0(("headdim",config["headdim"]))
+    # print_rank_0(("nheads_local",config["nheads_local"]))
     y = state_space_duality.process(inputs, state_opts)          
-
+    # print_rank_0(("y",y,y.shape))
+    z_reshaped = rearrange(z, "b l (h p) -> b l h p", h=self.nheads_local)
+    z_activated = torch.nn.functional.silu(z_reshaped)
+    # y_reshaped = rearrange(y, "b l (h p) -> b l h p", h=self.headdim)  # 重排 y 匹配 z
+    y = y * z_activated  # 核心门控计算
+    # y = rearrange(y_gated, "b l h p -> b l (h p)")  # 还原维度
+    # print_rank_0(("y silu z",y,y.shape))
     if ssm_state is not None:
         y, last_state, *rest = y
         if cu_seqlens is None:
@@ -168,7 +196,10 @@ def mamba_mixer_forward(self, hidden_states, seqlen=None, seq_idx=None, cu_seqle
 
     if self.rmsnorm:
         y = rearrange(y, "b l h p -> b l (h p)").contiguous()
-        y = self.norm(y, z=z)
+        # y = self.norm(y, z=z)
+        y = self.norm(y)
+        # print(self.norm)
+        # print_rank_0(("y norm",y,y.shape))
     else:
         y = rearrange(y, "b l h p -> b l (h p)").contiguous()
 
@@ -179,8 +210,11 @@ def mamba_mixer_forward(self, hidden_states, seqlen=None, seq_idx=None, cu_seqle
         y = rearrange(y, "b l d -> (b l) d")          
 
     y = rearrange(y, "b l d -> l b d").contiguous()
+    # print_rank_0(("y reshape",y,y.shape))
+    # print_rank_0(("self.out_proj",self.out_proj.weight,self.out_proj.weight.shape))
     out, out_bias = self.out_proj(y)
-
+    # print_rank_0(("out",out,out.shape))
+    # print_rank_0(("out_bias",out_bias))
     return out, out_bias 
 
 

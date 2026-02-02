@@ -132,14 +132,31 @@ def moe_layer_forward(self, hidden_states: torch.Tensor):
     # process MoE
     def custom_forward(hidden_states):
         probs, routing_map = self.router(hidden_states)
+        # from megatron.training.utils  import print_rank_0
+        # print_rank_0(("self.router",self.router.weight,self.router.weight.shape))
+        # print_rank_0(("hidden_states",hidden_states,hidden_states.shape))
+        # print_rank_0(("probs",probs,probs.shape))
         (dispatched_input, tokens_per_expert, permuted_probs) = (
             self.token_dispatcher.token_permutation(hidden_states, probs, routing_map)
         )
-        expert_output, mlp_bias = self.experts(
-            dispatched_input, tokens_per_expert, permuted_probs
+        # print_rank_0(("dispatched_input",dispatched_input,dispatched_input.shape))
+        # print_rank_0(("tokens_per_expert",tokens_per_expert,tokens_per_expert.shape))
+        # print_rank_0(("permuted_probs",permuted_probs,permuted_probs.shape))
+        permuted_probs_allone = torch.ones_like(
+            permuted_probs, 
+            device=permuted_probs.device, 
+            dtype=permuted_probs.dtype
         )
+        expert_output, mlp_bias = self.experts(
+            dispatched_input, tokens_per_expert, permuted_probs_allone
+        )
+        # print_rank_0(("self.experts.activation", self.experts.config.gated_linear_unit, self.experts.config.activation_func))
+        # print_rank_0(("expert_output",expert_output,expert_output.shape))
+        # print_rank_0(("mlp_bias",mlp_bias))
+        expert_output = expert_output * permuted_probs.unsqueeze(-1).to(expert_output.dtype)
         output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
-
+        # print_rank_0(("output",output,output.shape))
+        # print_rank_0(("mlp_bias",mlp_bias))
         args = get_args()
         if args.moe_router_load_balancing_type == "group_limited_greedy":
             # forward only need no loss track
