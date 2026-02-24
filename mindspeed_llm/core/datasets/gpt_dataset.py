@@ -180,26 +180,31 @@ def _build_document_sample_shuffle_indices(
             raise ValueError(f"Expected document_index dtype to be int32, but got {document_index.dtype}")
         if self.dataset.sequence_lengths.dtype != numpy.int32:
             raise ValueError(f"Expected sequence_lengths dtype to be int32, but got {self.dataset.sequence_lengths.dtype}")
-        if len(document_index) * 2 > len(self.dataset.sequence_lengths):
-            # Heuristic: if "access density" of sequence_lengths is relatively high,
-            # force loading the mmap-ed array into memory by taking a copy.
-            # System performance benefits come from two aspects:
-            # 1. **sequentially** pre-loading the whole file if we're gonna read a large fraction anyways.
-            # 2. GIL is held when calling into c++ code; making the c++ func faster improves parallelism.
-            sequence_lengths_for_cpp = self.dataset.sequence_lengths.copy()
+        if self.config.is_sft_dataset:
+            from megatron.core.datasets.gpt_dataset import build_sft_sample_idx
+            num_samples = num_epochs * len(self.indices)
+            sample_index = build_sft_sample_idx(num_samples)
         else:
-            sequence_lengths_for_cpp = self.dataset.sequence_lengths
+            if len(document_index) * 2 > len(self.dataset.sequence_lengths):
+                # Heuristic: if "access density" of sequence_lengths is relatively high,
+                # force loading the mmap-ed array into memory by taking a copy.
+                # System performance benefits come from two aspects:
+                # 1. **sequentially** pre-loading the whole file if we're gonna read a large fraction anyways.
+                # 2. GIL is held when calling into c++ code; making the c++ func faster improves parallelism.
+                sequence_lengths_for_cpp = self.dataset.sequence_lengths.copy()
+            else:
+                sequence_lengths_for_cpp = self.dataset.sequence_lengths
 
-        from megatron.core.datasets import helpers
-        sample_index = helpers.build_sample_idx(
-            sequence_lengths_for_cpp,
-            document_index,
-            sequence_length,
-            num_epochs,
-            num_tokens_per_epoch,
-            drop_last_partial_sequence,
-            self.config.add_extra_token_to_sequence,
-        )
+            from megatron.core.datasets import helpers
+            sample_index = helpers.build_sample_idx(
+                sequence_lengths_for_cpp,
+                document_index,
+                sequence_length,
+                num_epochs,
+                num_tokens_per_epoch,
+                drop_last_partial_sequence,
+                self.config.add_extra_token_to_sequence,
+            )
 
         if any(sample_index[:, 0] < 0):
             _url = "https://gitee.com/ascend/MindSpeed-LLM/wikis/megatron%20data%20helpers%E5%8F%AF%E8%83%BD%E5%BC%95%E5%85%A5%E7%9A%84%E9%97%AE%E9%A2%98"

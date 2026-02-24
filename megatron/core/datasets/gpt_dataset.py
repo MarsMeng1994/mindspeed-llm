@@ -18,13 +18,14 @@ from megatron.core.datasets.utils_s3 import S3Config, is_s3_path
 from megatron.core.utils import log_single_rank
 # import transformers
 # local_tokenizer = transformers.AutoTokenizer.from_pretrained(
-#             pretrained_model_name_or_path="/sharedata/zyf/models/Qwen2.5-1.5B-Instruct", 
+#             pretrained_model_name_or_path="/sharedata/msm/models/Qwen2.5-1.5B-Instruct-tokenizer/", 
 #             trust_remote_code=True,
 #         )
 # print("### local_tokenizer : {}\n".format(local_tokenizer))
 logger = logging.getLogger(__name__)
 
 _PAD_TOKEN_ID = -100
+# from megatron.training.utils import print_rank_0
 
 
 @dataclass
@@ -192,7 +193,11 @@ class GPTDataset(MegatronDataset):
             tokens = torch.from_numpy(tokens).long()
             labels = torch.from_numpy(labels).long()
             # attention_mask = torch.ones_like(tokens)
-
+            # print_rank_0((text,tokens,labels,len(text),len(tokens),len(labels)))
+            # print_rank_0(local_tokenizer.decode(tokens))
+            # label_s = int(torch.where(labels != -100)[0][0])
+            # label_e = int(torch.where(labels != -100)[0][-1])
+            # print_rank_0(local_tokenizer.decode(labels[label_s:label_e]))
             assert self.config.add_extra_token_to_sequence
             tmp = self.config.sequence_length + int(self.config.add_extra_token_to_sequence)
             if len(tokens) > tmp:
