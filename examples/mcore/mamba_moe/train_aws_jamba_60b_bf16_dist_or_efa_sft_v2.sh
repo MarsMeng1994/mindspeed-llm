@@ -140,28 +140,46 @@ esac
 DATA_PATH=/sharedata/msm/data/sft-idx-bin/20251118/cot-qwen-72b-gen_question_document
 TOKENIZER_PATH=/sharedata/msm/models/Qwen2.5-1.5B-Instruct-tokenizer/
 
-export CUDA_DEVICE_MAX_CONNECTIONS=1
-# export NCCL_IB_TIMEOUT=19
-# export NCCL_IB_QPS_PER_CONNECTION=8
-export NCCL_SOCKET_NTHREADS=8
-# export NCCL_IB_SL=1
-export NCCL_IB_DISABLE=0
-export NCCL_TIMEOUT=600 
+# ========== HCCL（昇腾通信库）核心配置 ==========
+# 开启HCCL调试日志（对应NCCL_DEBUG=INFO）
+export HCCL_DEBUG=INFO
+# 设置通信超时时间（对应NCCL_TIMEOUT=600）
+export HCCL_TIMEOUT=600
+# 启用IB/RDMA网卡（对应NCCL_IB_DISABLE=0）
+export HCCL_IB_DISABLE=0
+# 设置Socket通信线程数（对应NCCL_SOCKET_NTHREADS=8）
+export HCCL_SOCKET_NTHREADS=8
+# 若使用RDMA，启用设备级RDMA（对应FI_EFA_USE_DEVICE_RDMA=1）
+export HCCL_RDMA_ENABLE=1
 
-# export DS_BUILD_FUSED_ADAM=1
-# export NCCL_PROTO=simple
-export NCCL_DEBUG=INFO
-# export HCCL_OVER_OFI=1
-# 使用efa
-export FI_PROVIDER=efa
-# export NCCL_IGNORE_DISABLED_P2P=1
-## 如果拉起的集群为A100/H100（P4d/P5机型）节点，可以设置如下的NCCL参数启用RDMA，以获得多机多卡训练时节点GPU更大的网络吞吐量
-export FI_EFA_USE_DEVICE_RDMA=1
+# ========== 网络提供者配置（若用RDMA） ==========
+# 替换FI_PROVIDER=efa为NPU兼容的RDMA
+export FI_PROVIDER=rdma
+# 设置RDMA相关参数
+export FI_RDMA_CONNECT_TIMEOUT=6000
+
+# export CUDA_DEVICE_MAX_CONNECTIONS=1
+# # export NCCL_IB_TIMEOUT=19
+# # export NCCL_IB_QPS_PER_CONNECTION=8
+# export NCCL_SOCKET_NTHREADS=8
+# # export NCCL_IB_SL=1
+# export NCCL_IB_DISABLE=0
+# export NCCL_TIMEOUT=600 
+
+# # export DS_BUILD_FUSED_ADAM=1
+# # export NCCL_PROTO=simple
+# export NCCL_DEBUG=INFO
+# # export HCCL_OVER_OFI=1
+# # 使用efa
+# export FI_PROVIDER=efa
+# # export NCCL_IGNORE_DISABLED_P2P=1
+# ## 如果拉起的集群为A100/H100（P4d/P5机型）节点，可以设置如下的NCCL参数启用RDMA，以获得多机多卡训练时节点GPU更大的网络吞吐量
+# export FI_EFA_USE_DEVICE_RDMA=1
 
 # 从环境变量中读取值
 GPUS_PER_NODE=${GPUS_PER_NODE:-16}
 # MASTER_ADDR=${MASTER_ADDR:-"localhost"}
-MASTER_IP=${MASTER_IP:-"192.168.32.155"}
+MASTER_IP=${MASTER_IP:-"192.168.62.7"}
 MASTER_PORT=${MASTER_PORT:-6000}
 NUM_NODES=${NUM_NODES:-2}
 NODE_RANK=${NODE_RANK:-0}
